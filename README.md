@@ -65,7 +65,7 @@ Projekt składa się z aplikacji mobilnej oraz sterowników ESP32 – po jednym 
 | 📡 **Status**                   | Stan połączenia oraz podstawowe informacje diagnostyczne sterowników.        |
 | ⚙️ **Ustawienia**               | Konfiguracja połączenia z brokerem bez zmian w kodzie.                       |
 | 🔁 **Niezawodność**             | Automatyczne wznawianie połączeń po stronie aplikacji i sterowników.         |
-| 📶 **Aktualizacja przez Wi-Fi** | Firmware sterowników można aktualizować w sieci lokalnej.                    |
+| 📶 **Aktualizacja przez Wi-Fi** | Firmware sterowników można aktualizować w sieci lokalnej; nieudana aktualizacja jest automatycznie wycofywana. |
 
 ---
 
@@ -129,9 +129,9 @@ CerberHomeControl/
 
 | Workflow     | Kiedy                           | Co robi                                         |
 | ------------ | ------------------------------- | ----------------------------------------------- |
-| **App**      | zmiany w `app/`                 | analiza i testy aplikacji                       |
+| **App**      | zmiany w `app/` (poza samym numerem wersji) | analiza i testy aplikacji         |
 | **Firmware** | zmiany w `firmware/`            | sprawdzenie kompilacji firmware (bez sekretów)  |
-| **Release**  | tag `v*`                        | podpisane APK i wydanie (Release) na GitHubie   |
+| **Release**  | tag `v*`                        | wydanie (Release) na GitHubie; podpisane APK tylko, gdy aplikacja się zmieniła |
 
 Wydania wymagają klucza podpisu aplikacji zapisanego w sekretach repozytorium.
 

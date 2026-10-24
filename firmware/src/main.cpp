@@ -6,13 +6,17 @@
 // "BUSY" (pulse already in progress).
 // Device info is published on connect and, while the app keeps sending
 // requests on the info request topic, every 10 s.
-// Firmware can be updated over Wi-Fi (ArduinoOTA) when OTA_PASSWORD is set.
+// Firmware can be updated over Wi-Fi (ArduinoOTA) when OTA_PASSWORD is set;
+// an update that cannot keep Wi-Fi is rolled back to the previous firmware.
 
 #include <Arduino.h>
 #include <ArduinoOTA.h>
+#include <Preferences.h>
 #include <PubSubClient.h>
+#include <Update.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
+#include <esp_ota_ops.h>
 #include <esp_timer.h>
 #include <time.h>
 
@@ -84,6 +88,16 @@ const unsigned long INFO_INTERVAL_MS = 10000;
 const unsigned long INFO_REQUEST_TIMEOUT_MS = 60000; // the app re-requests every 30 s
 
 bool otaStarted = false;
+
+// Firmware installed over OTA runs "on trial" until it stays connected to
+// Wi-Fi; otherwise the previous firmware is restored (see OTA TRIAL).
+Preferences otaPrefs;
+bool otaTrial = false;
+unsigned long otaTrialStartedAt = 0;
+unsigned long otaTrialWifiSince = 0;
+const unsigned long OTA_TRIAL_TIMEOUT_MS = 180000;     // 3 minutes to reach Wi-Fi
+const unsigned long OTA_TRIAL_WIFI_STABLE_MS = 30000;  // Wi-Fi must hold for 30 s
+const uint8_t OTA_TRIAL_MAX_BOOTS = 3;                 // crash loop protection
 
 // ===================== DECLARATIONS =====================
 void publishDeviceInfo();
@@ -174,7 +188,8 @@ void handleWiFi() {
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   }
 
-  if (millis() - wifiLostAt >= WIFI_RESTART_AFTER_MS) {
+  // During an OTA trial the trial decides between keeping and rolling back.
+  if (!otaTrial && millis() - wifiLostAt >= WIFI_RESTART_AFTER_MS) {
     Serial.println("No Wi-Fi for 2 minutes. Restarting ESP32.");
     delay(1000);
     ESP.restart();
@@ -302,6 +317,89 @@ void handleDeviceInfo() {
   }
 }
 
+// ===================== OTA TRIAL =====================
+// The trial is tied to the partition written by OTA, so a later USB upload
+// (which boots another partition) never inherits a stale trial.
+void startOtaTrial() {
+  const esp_partition_t* next = esp_ota_get_boot_partition();
+
+  otaPrefs.begin("ota", false);
+  otaPrefs.putString("trial", next->label);
+  otaPrefs.putUChar("boots", 0);
+  otaPrefs.end();
+}
+
+void endOtaTrial() {
+  otaPrefs.begin("ota", false);
+  otaPrefs.clear();
+  otaPrefs.end();
+  otaTrial = false;
+}
+
+void rollBackFirmware(const char* reason) {
+  digitalWrite(RELAY_PIN, RELAY_INACTIVE);
+  endOtaTrial();
+
+  Serial.print("New firmware failed (");
+  Serial.print(reason);
+  Serial.println(").");
+
+  if (Update.canRollBack() && Update.rollBack()) {
+    Serial.println("Rolling back to the previous firmware.");
+    delay(1000);
+    ESP.restart();
+  }
+  Serial.println("No previous firmware to roll back to - keeping this one.");
+}
+
+void beginOtaTrial() {
+  otaPrefs.begin("ota", false);
+  String trialPartition = otaPrefs.getString("trial", "");
+  if (trialPartition.isEmpty()) {
+    otaPrefs.end();
+    return;
+  }
+  if (trialPartition != esp_ota_get_running_partition()->label) {
+    otaPrefs.end();
+    endOtaTrial(); // flashed over USB since the OTA update
+    return;
+  }
+
+  uint8_t boots = otaPrefs.getUChar("boots", 0) + 1;
+  otaPrefs.putUChar("boots", boots);
+  otaPrefs.end();
+
+  otaTrial = true;
+  otaTrialStartedAt = millis();
+  Serial.printf("New firmware on trial (boot %u of %u).\n", boots, OTA_TRIAL_MAX_BOOTS);
+
+  if (boots > OTA_TRIAL_MAX_BOOTS) {
+    rollBackFirmware("keeps restarting");
+  }
+}
+
+void handleOtaTrial() {
+  if (!otaTrial) {
+    return;
+  }
+
+  if (WiFi.status() == WL_CONNECTED) {
+    if (otaTrialWifiSince == 0) {
+      otaTrialWifiSince = millis();
+    }
+    if (millis() - otaTrialWifiSince >= OTA_TRIAL_WIFI_STABLE_MS) {
+      endOtaTrial();
+      Serial.println("New firmware confirmed.");
+    }
+    return;
+  }
+
+  otaTrialWifiSince = 0;
+  if (millis() - otaTrialStartedAt >= OTA_TRIAL_TIMEOUT_MS) {
+    rollBackFirmware("no Wi-Fi");
+  }
+}
+
 // ===================== OTA =====================
 void startOta() {
   if (strlen(OTA_PASSWORD) == 0) {
@@ -320,6 +418,7 @@ void startOta() {
     Serial.println("OTA update started.");
   });
   ArduinoOTA.onEnd([]() {
+    startOtaTrial();
     Serial.println("OTA update finished, restarting.");
   });
   ArduinoOTA.onError([](ota_error_t error) {
@@ -358,6 +457,7 @@ void setup() {
   pinMode(LED_PIN, OUTPUT);
   digitalWrite(LED_PIN, LOW);
 
+  beginOtaTrial();
   setupWiFi();
   configTime(0, 0, "pool.ntp.org", "time.google.com");
 
@@ -372,6 +472,7 @@ void setup() {
 // ===================== LOOP =====================
 void loop() {
   handleWiFi();
+  handleOtaTrial();
   handleOta();
   handleMqtt();
   handleRelayPulse();
