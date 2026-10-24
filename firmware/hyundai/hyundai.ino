@@ -6,6 +6,7 @@
 #include <PubSubClient.h>
 #include <WiFiClientSecure.h>
 #include "secrets.h" // credentials live in secrets.development.h (not in the repo)
+#include "ca_cert.h"
 
 // ===================== DEVICE =====================
 const char* mqtt_client_id = "cerber-hyundai";
@@ -218,9 +219,7 @@ void setup() {
 
   setupWiFi();
 
-  // TLS without certificate verification.
-  // Works with HiveMQ Cloud; adding the CA certificate would be safer.
-  espClient.setInsecure();
+  espClient.setCACert(MQTT_CA_CERT);
 
   client.setServer(MQTT_HOST, MQTT_PORT);
   client.setCallback(mqttCallback);
