@@ -1,6 +1,8 @@
 // Cerber - main entrance gate controller (ESP32).
 // Pulses the relay when "START" arrives on the command topic and reports
 // ONLINE / OFFLINE (retained, OFFLINE via Last Will) on the status topic.
+// Each command is answered on the ack topic with "OK" (relay on) or
+// "BUSY" (pulse already in progress).
 
 #include <WiFi.h>
 #include <PubSubClient.h>
@@ -12,6 +14,7 @@
 const char* mqtt_client_id = "cerber-main_gate";
 const char* mqtt_command_topic = "cerber/main_gate/command";
 const char* mqtt_status_topic = "cerber/main_gate/status";
+const char* mqtt_ack_topic = "cerber/main_gate/ack";
 
 // Prefix for serial log messages
 const char* LOG_TAG = "MAIN_GATE";
@@ -49,6 +52,7 @@ const unsigned long WIFI_RESTART_AFTER_MS = 120000; // restart after 2 minutes w
 void startRelayPulse() {
   if (relayPulseActive) {
     Serial.println("Pulse already in progress - ignoring command.");
+    client.publish(mqtt_ack_topic, "BUSY");
     return;
   }
 
@@ -58,6 +62,7 @@ void startRelayPulse() {
 
   relayPulseActive = true;
   relayOffAt = millis() + RELAY_PULSE_MS;
+  client.publish(mqtt_ack_topic, "OK");
 }
 
 void handleRelayPulse() {

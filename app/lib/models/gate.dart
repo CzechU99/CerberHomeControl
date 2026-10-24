@@ -1,5 +1,6 @@
 const String gateStartCommand = 'START';
 const String deviceOnlineStatus = 'ONLINE';
+const String commandAcceptedAck = 'OK';
 
 class Gate {
   const Gate({
@@ -15,6 +16,7 @@ class Gate {
 
   String get commandTopic => 'cerber/$id/command';
   String get statusTopic => 'cerber/$id/status';
+  String get ackTopic => 'cerber/$id/ack';
 }
 
 const List<Gate> gates = [

@@ -70,9 +70,10 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   Widget _buildPage() {
     return switch (_selectedIndex) {
       0 => HomePage(
-        sendCommand: _mqtt.publish,
+        onOpenGate: _mqtt.openGate,
         isBrokerConnected: _mqtt.isBrokerConnected,
         gateOnline: _mqtt.gateOnline,
+        commandStatuses: _mqtt.commandStatuses,
       ),
       1 => StatusPage(
         isBrokerConnected: _mqtt.isBrokerConnected,

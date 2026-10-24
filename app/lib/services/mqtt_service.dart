@@ -6,6 +6,7 @@ import 'package:mqtt_client/mqtt_server_client.dart';
 
 import '../models/gate.dart';
 import '../models/mqtt_settings.dart';
+import 'command_tracker.dart';
 
 class MqttService extends ChangeNotifier {
   static const _retryDelay = Duration(seconds: 10);
@@ -21,9 +22,13 @@ class MqttService extends ChangeNotifier {
   final Map<String, bool> _gateOnline = {
     for (final gate in gates) gate.id: false,
   };
+  late final _commands = CommandTracker(onChanged: notifyListeners);
 
   bool get isBrokerConnected => _isBrokerConnected;
   Map<String, bool> get gateOnline => Map.unmodifiable(_gateOnline);
+  Map<String, CommandStatus> get commandStatuses => {
+    for (final gate in gates) gate.id: _commands.statusOf(gate.id),
+  };
 
   Future<void> connect(MqttSettings settings) async {
     _closeConnection();
@@ -75,6 +80,7 @@ class MqttService extends ChangeNotifier {
     _hasConnected = true;
     for (final gate in gates) {
       client.subscribe(gate.statusTopic, MqttQos.atLeastOnce);
+      client.subscribe(gate.ackTopic, MqttQos.atLeastOnce);
     }
     _updates = client.updates?.listen(handleMessages);
   }
@@ -95,12 +101,17 @@ class MqttService extends ChangeNotifier {
     }
   }
 
-  void publish(String topic, String message) {
+  void openGate(Gate gate) {
     final client = _client;
     if (client == null || !_isBrokerConnected) return;
 
-    final builder = MqttClientPayloadBuilder()..addString(message);
-    client.publishMessage(topic, MqttQos.atLeastOnce, builder.payload!);
+    final builder = MqttClientPayloadBuilder()..addString(gateStartCommand);
+    client.publishMessage(
+      gate.commandTopic,
+      MqttQos.atLeastOnce,
+      builder.payload!,
+    );
+    _commands.start(gate.id);
   }
 
   @visibleForTesting
@@ -114,6 +125,11 @@ class MqttService extends ChangeNotifier {
       for (final gate in gates) {
         if (message.topic == gate.statusTopic) {
           _gateOnline[gate.id] = payload == deviceOnlineStatus;
+        } else if (message.topic == gate.ackTopic) {
+          _commands.acknowledge(
+            gate.id,
+            accepted: payload == commandAcceptedAck,
+          );
         }
       }
     }
@@ -159,6 +175,7 @@ class MqttService extends ChangeNotifier {
   @override
   void dispose() {
     _closeConnection();
+    _commands.dispose();
     super.dispose();
   }
 }
