@@ -1,0 +1,9 @@
+[tool.commitizen]
+name = "cz_conventional_commits"
+version_provider = "commitizen"
+version = "1.0.0"
+version_scheme = "semver2"
+tag_format = "v$version"
+version_files = ["app/pubspec.yaml:^version:"]
+update_changelog_on_bump = true
+changelog_file = "CHANGELOG.md"
