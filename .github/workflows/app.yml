@@ -21,13 +21,35 @@ jobs:
         working-directory: app
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # A push that only bumps the version (cz bump) skips the checks.
+      - name: Detect app changes
+        id: changes
+        working-directory: .
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          if [ "$EVENT_NAME" != "push" ] || ! git diff --quiet "$BEFORE" "$GITHUB_SHA" -- .github/workflows/app.yml 2>/dev/null; then
+            app_changed=true
+          else
+            app_changed=$(bash scripts/app_changed.sh "$BEFORE" "$GITHUB_SHA")
+          fi
+          echo "App changed: $app_changed"
+          echo "app=$app_changed" >> "$GITHUB_OUTPUT"
 
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        if: steps.changes.outputs.app == 'true'
         with:
           flutter-version: "3.35.3"
           channel: stable
           cache: true
 
-      - run: flutter pub get
-      - run: flutter analyze
-      - run: flutter test
+      - if: steps.changes.outputs.app == 'true'
+        run: flutter pub get
+      - if: steps.changes.outputs.app == 'true'
+        run: flutter analyze
+      - if: steps.changes.outputs.app == 'true'
+        run: flutter test

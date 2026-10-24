@@ -1,5 +1,6 @@
-# Builds a signed release APK for every v* tag (created by `cz bump`) and
-# publishes it as a GitHub Release with the matching CHANGELOG.md section.
+# Publishes a GitHub Release with the matching CHANGELOG.md section for every
+# v* tag (created by `cz bump`). A signed APK is built and attached only when
+# the app changed since the previous tag - a version bump alone does not count.
 name: Release
 
 on:
@@ -11,12 +12,25 @@ permissions:
 
 jobs:
   release:
-    name: Build and publish APK
+    name: Publish release
     runs-on: ubuntu-latest
     # Signing secrets are passed only to the steps that need them, so the
     # third-party actions never see them.
     steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect app changes
+        id: changes
+        run: |
+          previous_tag=$(git describe --tags --abbrev=0 --match 'v*' "${GITHUB_REF_NAME}^" 2>/dev/null || true)
+          app_changed=$(bash scripts/app_changed.sh "$previous_tag" "$GITHUB_REF_NAME")
+          echo "Previous tag: ${previous_tag:-none}, app changed: $app_changed"
+          echo "app=$app_changed" >> "$GITHUB_OUTPUT"
+
       - name: Check signing secrets
+        if: steps.changes.outputs.app == 'true'
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -30,20 +44,21 @@ jobs:
             fi
           done
 
-      - uses: actions/checkout@v4
-
       - uses: actions/setup-java@v4
+        if: steps.changes.outputs.app == 'true'
         with:
           distribution: temurin
           java-version: "17"
 
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        if: steps.changes.outputs.app == 'true'
         with:
           flutter-version: "3.35.3"
           channel: stable
           cache: true
 
       - name: Create signing config
+        if: steps.changes.outputs.app == 'true'
         working-directory: app/android
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -60,6 +75,7 @@ jobs:
           EOF
 
       - name: Test and build APK
+        if: steps.changes.outputs.app == 'true'
         working-directory: app
         run: |
           flutter pub get
@@ -67,14 +83,16 @@ jobs:
           flutter build apk --release
 
       - name: Remove signing key
-        if: always()
+        if: always() && steps.changes.outputs.app == 'true'
         working-directory: app/android
         run: rm -f key.properties app/upload-keystore.jks
 
       - name: Prepare release files
+        env:
+          APP_CHANGED: ${{ steps.changes.outputs.app }}
         run: |
           version="${GITHUB_REF_NAME#v}"
-          mv app/build/app/outputs/flutter-apk/app-release.apk "cerber-$version.apk"
+          echo "VERSION=$version" >> "$GITHUB_ENV"
 
           awk -v tag="$GITHUB_REF_NAME" '
             index($0, "## " tag " ") == 1 || $0 == "## " tag { found = 1; next }
@@ -84,10 +102,17 @@ jobs:
           if [ ! -s release-notes.md ]; then
             echo "Wydanie $GITHUB_REF_NAME" > release-notes.md
           fi
-          echo "VERSION=$version" >> "$GITHUB_ENV"
+
+          if [ "$APP_CHANGED" = "true" ]; then
+            mv app/build/app/outputs/flutter-apk/app-release.apk "cerber-$version.apk"
+            echo "APK_FILE=cerber-$version.apk" >> "$GITHUB_ENV"
+          else
+            printf '\n> Aplikacja mobilna bez zmian – brak nowego APK.\n' >> release-notes.md
+            echo "APK_FILE=" >> "$GITHUB_ENV"
+          fi
 
       - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           name: Cerber ${{ env.VERSION }}
           body_path: release-notes.md
-          files: cerber-${{ env.VERSION }}.apk
+          files: ${{ env.APK_FILE }}
