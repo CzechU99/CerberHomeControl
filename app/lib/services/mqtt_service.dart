@@ -40,7 +40,7 @@ class MqttService extends ChangeNotifier {
           ..keepAlivePeriod = 20
           ..disconnectOnNoResponsePeriod = 10
           ..autoReconnect = true
-          ..logging(on: true);
+          ..logging(on: kDebugMode);
 
     bool isCurrent() => identical(client, _client);
     client.onConnected = () {

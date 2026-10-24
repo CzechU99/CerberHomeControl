@@ -1,3 +1,4 @@
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class MqttSettings {
@@ -17,6 +18,8 @@ class MqttSettings {
   static const _usernameKey = 'username';
   static const _passwordKey = 'password';
 
+  static const _secureStorage = FlutterSecureStorage();
+
   final String broker;
   final String clientId;
   final int port;
@@ -32,8 +35,18 @@ class MqttSettings {
       clientId: prefs.getString(_clientIdKey) ?? '',
       port: prefs.getInt(_portKey) ?? defaultPort,
       username: prefs.getString(_usernameKey) ?? '',
-      password: prefs.getString(_passwordKey) ?? '',
+      password: await _loadPassword(prefs),
     );
+  }
+
+  static Future<String> _loadPassword(SharedPreferences prefs) async {
+    final legacyPassword = prefs.getString(_passwordKey);
+    if (legacyPassword != null) {
+      await _secureStorage.write(key: _passwordKey, value: legacyPassword);
+      await prefs.remove(_passwordKey);
+      return legacyPassword;
+    }
+    return await _secureStorage.read(key: _passwordKey) ?? '';
   }
 
   Future<void> save() async {
@@ -42,6 +55,6 @@ class MqttSettings {
     await prefs.setString(_clientIdKey, clientId);
     await prefs.setInt(_portKey, port);
     await prefs.setString(_usernameKey, username);
-    await prefs.setString(_passwordKey, password);
+    await _secureStorage.write(key: _passwordKey, value: password);
   }
 }
