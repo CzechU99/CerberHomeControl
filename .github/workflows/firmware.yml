@@ -1,0 +1,35 @@
+# Only checks that every gate compiles. It uses the empty secrets.h template,
+# so no credentials are needed and no firmware files are published -
+# flashing stays local (USB or OTA in the home network).
+name: Firmware
+
+on:
+  push:
+    branches: ["**"]
+    paths:
+      - "firmware/**"
+      - ".github/workflows/firmware.yml"
+  pull_request:
+    paths:
+      - "firmware/**"
+      - ".github/workflows/firmware.yml"
+
+jobs:
+  build:
+    name: Compile all gates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: platformio-${{ hashFiles('firmware/platformio.ini') }}
+
+      - run: pip install platformio
+
+      - run: pio run -d firmware
