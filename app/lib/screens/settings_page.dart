@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+
+import '../models/mqtt_settings.dart';
 
 class SettingsPage extends StatefulWidget {
-  const SettingsPage({super.key, this.onSave});
+  const SettingsPage({super.key, required this.onSave});
 
-  final VoidCallback? onSave;
+  final Future<void> Function(MqttSettings settings) onSave;
 
   @override
   State<SettingsPage> createState() => _SettingsPageState();
@@ -29,6 +30,16 @@ class _SettingsPageState extends State<SettingsPage> {
     _loadAppVersion();
   }
 
+  @override
+  void dispose() {
+    _clientIdController.dispose();
+    _brokerController.dispose();
+    _portController.dispose();
+    _usernameController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
   Future<void> _loadAppVersion() async {
     final info = await PackageInfo.fromPlatform();
     if (!mounted) return;
@@ -36,27 +47,30 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _loadSettings() async {
-    final prefs = await SharedPreferences.getInstance();
+    final settings = await MqttSettings.load();
+    if (!mounted) return;
     setState(() {
-      _clientIdController.text = prefs.getString('clientID') ?? '';
-      _brokerController.text = '';
-      _portController.text = (prefs.getInt('port') ?? 8883).toString();
-      _usernameController.text = prefs.getString('username') ?? '';
-      _passwordController.text = '';
+      _clientIdController.text = settings.clientId;
+      _brokerController.text = settings.broker;
+      _portController.text = settings.port.toString();
+      _usernameController.text = settings.username;
+      _passwordController.text = settings.password;
     });
   }
 
   Future<void> _saveSettings() async {
     if (!_formKey.currentState!.validate()) return;
 
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('clientID', _clientIdController.text);
-    await prefs.setString('broker', _brokerController.text);
-    await prefs.setInt('port', int.tryParse(_portController.text) ?? 8883);
-    await prefs.setString('username', _usernameController.text);
-    await prefs.setString('password', _passwordController.text);
-
-    widget.onSave?.call();
+    final settings = MqttSettings(
+      broker: _brokerController.text.trim(),
+      clientId: _clientIdController.text.trim(),
+      port:
+          int.tryParse(_portController.text.trim()) ?? MqttSettings.defaultPort,
+      username: _usernameController.text.trim(),
+      password: _passwordController.text,
+    );
+    await settings.save();
+    widget.onSave(settings);
 
     if (mounted) {
       ScaffoldMessenger.of(
