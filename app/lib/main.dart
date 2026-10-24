@@ -30,6 +30,8 @@ class MainScreen extends StatefulWidget {
 }
 
 class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
+  static const _settingsTabIndex = 2;
+
   final _mqtt = MqttService();
   int _selectedIndex = 0;
 
@@ -42,6 +44,10 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
 
   Future<void> _loadSettingsAndConnect() async {
     final settings = await MqttSettings.load();
+    if (!settings.isComplete) {
+      if (mounted) setState(() => _selectedIndex = _settingsTabIndex);
+      return;
+    }
     await _mqtt.connect(settings);
   }
 

@@ -76,7 +76,7 @@ class MqttService extends ChangeNotifier {
     for (final gate in gates) {
       client.subscribe(gate.statusTopic, MqttQos.atLeastOnce);
     }
-    _updates = client.updates?.listen(_onMessages);
+    _updates = client.updates?.listen(handleMessages);
   }
 
   void pause() {
@@ -103,7 +103,8 @@ class MqttService extends ChangeNotifier {
     client.publishMessage(topic, MqttQos.atLeastOnce, builder.payload!);
   }
 
-  void _onMessages(List<MqttReceivedMessage<MqttMessage>> messages) {
+  @visibleForTesting
+  void handleMessages(List<MqttReceivedMessage<MqttMessage>> messages) {
     for (final message in messages) {
       final publishMessage = message.payload as MqttPublishMessage;
       final payload = MqttPublishPayload.bytesToStringAsString(
