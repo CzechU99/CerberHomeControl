@@ -5,7 +5,9 @@
 // "BUSY" (pulse already in progress).
 // Device info is published on connect and, while the app keeps sending
 // requests on the info request topic, every 10 s.
+// Firmware can be updated over Wi-Fi (ArduinoOTA) when OTA_PASSWORD is set.
 
+#include <ArduinoOTA.h>
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include <WiFiClientSecure.h>
@@ -23,6 +25,9 @@ const char* mqtt_status_topic = "cerber/toyota/status";
 const char* mqtt_ack_topic = "cerber/toyota/ack";
 const char* mqtt_info_topic = "cerber/toyota/info";
 const char* mqtt_info_request_topic = "cerber/toyota/info/request";
+
+// Network name shown as the OTA port in Arduino IDE
+const char* ota_hostname = "cerber-toyota";
 
 // Prefix for serial log messages
 const char* LOG_TAG = "TOYOTA";
@@ -61,6 +66,8 @@ unsigned long lastInfoRequestAt = 0;
 bool infoRequested = false;
 const unsigned long INFO_INTERVAL_MS = 10000;
 const unsigned long INFO_REQUEST_TIMEOUT_MS = 60000; // the app re-requests every 30 s
+
+bool otaStarted = false;
 
 // ===================== RELAY =====================
 void startRelayPulse() {
@@ -275,6 +282,51 @@ void handleDeviceInfo() {
   }
 }
 
+// ===================== OTA =====================
+void startOta() {
+  if (strlen(OTA_PASSWORD) == 0) {
+    Serial.println("OTA disabled - set OTA_PASSWORD in secrets.development.h.");
+    otaStarted = true; // do not retry
+    return;
+  }
+
+  ArduinoOTA.setHostname(ota_hostname);
+  ArduinoOTA.setPassword(OTA_PASSWORD);
+
+  ArduinoOTA.onStart([]() {
+    // Never leave the gate relay on while flashing.
+    digitalWrite(RELAY_PIN, RELAY_INACTIVE);
+    relayPulseActive = false;
+    Serial.println("OTA update started.");
+  });
+  ArduinoOTA.onEnd([]() {
+    Serial.println("OTA update finished, restarting.");
+  });
+  ArduinoOTA.onError([](ota_error_t error) {
+    Serial.print("OTA error: ");
+    Serial.println(error);
+  });
+
+  ArduinoOTA.begin();
+  otaStarted = true;
+
+  Serial.print("OTA ready as ");
+  Serial.println(ota_hostname);
+}
+
+void handleOta() {
+  if (WiFi.status() != WL_CONNECTED) {
+    return;
+  }
+
+  // ArduinoOTA needs a working network, so it starts on the first connection.
+  if (!otaStarted) {
+    startOta();
+  }
+
+  ArduinoOTA.handle();
+}
+
 // ===================== SETUP =====================
 void setup() {
   Serial.begin(115200);
@@ -300,6 +352,7 @@ void setup() {
 // ===================== LOOP =====================
 void loop() {
   handleWiFi();
+  handleOta();
   handleMqtt();
   handleRelayPulse();
   handleDeviceInfo();

@@ -14,4 +14,6 @@
 #define MQTT_PORT     8883
 #define MQTT_USER     ""
 #define MQTT_PASSWORD ""
+
+#define OTA_PASSWORD  ""  // empty = OTA disabled
 #endif
