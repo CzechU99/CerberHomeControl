@@ -34,12 +34,25 @@ void main() {
     ),
   );
 
-  testWidgets('opens the gate on tap', (tester) async {
+  testWidgets('opens the gate on long press', (tester) async {
+    final opened = await pumpHomePage(tester);
+
+    await tester.longPress(find.text(honda.buttonLabel));
+
+    expect(opened, [honda]);
+  });
+
+  testWidgets('a short tap only shows a hint', (tester) async {
     final opened = await pumpHomePage(tester);
 
     await tester.tap(find.text(honda.buttonLabel));
+    await tester.pump();
 
-    expect(opened, [honda]);
+    expect(opened, isEmpty);
+    expect(
+      find.text('Przytrzymaj przycisk, aby otworzyć bramę'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('shows progress and blocks taps while waiting for ack', (
@@ -49,6 +62,7 @@ void main() {
 
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
     expect(hondaButton(tester).onPressed, isNull);
+    expect(hondaButton(tester).onLongPress, isNull);
   });
 
   testWidgets('shows the result of the command', (tester) async {

@@ -30,7 +30,7 @@ class HomePage extends StatelessWidget {
               gate: gate,
               isAvailable: isBrokerConnected && (gateOnline[gate.id] ?? false),
               commandStatus: commandStatuses[gate.id] ?? CommandStatus.idle,
-              onPressed: () => onOpenGate(gate),
+              onOpen: () => onOpenGate(gate),
             ),
         ],
       ),
@@ -43,13 +43,13 @@ class _GateButton extends StatefulWidget {
     required this.gate,
     required this.isAvailable,
     required this.commandStatus,
-    required this.onPressed,
+    required this.onOpen,
   });
 
   final Gate gate;
   final bool isAvailable;
   final CommandStatus commandStatus;
-  final VoidCallback onPressed;
+  final VoidCallback onOpen;
 
   @override
   State<_GateButton> createState() => _GateButtonState();
@@ -91,9 +91,21 @@ class _GateButtonState extends State<_GateButton> {
     };
   }
 
+  void _showHoldHint() {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        const SnackBar(
+          content: Text('Przytrzymaj przycisk, aby otworzyć bramę'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final isPending = widget.commandStatus == CommandStatus.pending;
+    final isEnabled =
+        widget.isAvailable && widget.commandStatus != CommandStatus.pending;
     final statusIcon = _buildStatusIcon();
 
     return ElevatedButton(
@@ -102,7 +114,8 @@ class _GateButtonState extends State<_GateButton> {
         backgroundColor: Colors.blue,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
       ),
-      onPressed: widget.isAvailable && !isPending ? widget.onPressed : null,
+      onPressed: isEnabled ? _showHoldHint : null,
+      onLongPress: isEnabled ? widget.onOpen : null,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         spacing: 12,
