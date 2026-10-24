@@ -1,3 +1,9 @@
+## v1.2.0 (2026-10-24)
+
+### Feat
+
+- **firmware**: roll back an OTA update that cannot keep Wi-Fi
+
 ## v1.1.0 (2026-10-24)
 
 ### Feat
