@@ -4,6 +4,7 @@
 name: Firmware
 
 on:
+  workflow_dispatch:
   push:
     branches: ["**"]
     paths:
