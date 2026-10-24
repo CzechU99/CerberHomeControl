@@ -1,4 +1,5 @@
-// Cerber - Toyota (barn) garage gate controller (ESP32).
+// Cerber - gate controller (ESP32). One firmware for every gate; the gate is
+// selected by the PlatformIO environment (see platformio.ini).
 // Pulses the relay when "START" arrives on the command topic and reports
 // ONLINE / OFFLINE (retained, OFFLINE via Last Will) on the status topic.
 // Each command is answered on the ack topic with "OK" (relay on) or
@@ -7,35 +8,50 @@
 // requests on the info request topic, every 10 s.
 // Firmware can be updated over Wi-Fi (ArduinoOTA) when OTA_PASSWORD is set.
 
+#include <Arduino.h>
 #include <ArduinoOTA.h>
-#include <WiFi.h>
 #include <PubSubClient.h>
+#include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <esp_timer.h>
 #include <time.h>
-#include "secrets.h" // credentials live in secrets.development.h (not in the repo)
+
 #include "ca_cert.h"
+#include "secrets.h" // credentials live in secrets.development.h (not in the repo)
+#include "version.h"
+
+#if !defined(DEVICE_ID) || !defined(DEVICE_KEY) || !defined(DEVICE_LABEL) || !defined(OTA_HOSTNAME)
+#error "Build a gate environment from platformio.ini, e.g. pio run -e honda"
+#endif
 
 // ===================== DEVICE =====================
-#define FIRMWARE_VERSION "1.0.0"
+// Picks the *_<DEVICE_KEY> credentials, e.g. MQTT_USER_HONDA.
+#define CERBER_CONCAT_(a, b) a##b
+#define CERBER_CONCAT(a, b) CERBER_CONCAT_(a, b)
+#define MQTT_USER CERBER_CONCAT(MQTT_USER_, DEVICE_KEY)
+#define MQTT_PASSWORD CERBER_CONCAT(MQTT_PASSWORD_, DEVICE_KEY)
+#define OTA_PASSWORD CERBER_CONCAT(OTA_PASSWORD_, DEVICE_KEY)
 
-const char* mqtt_client_id = "cerber-toyota";
-const char* mqtt_command_topic = "cerber/toyota/command";
-const char* mqtt_status_topic = "cerber/toyota/status";
-const char* mqtt_ack_topic = "cerber/toyota/ack";
-const char* mqtt_info_topic = "cerber/toyota/info";
-const char* mqtt_info_request_topic = "cerber/toyota/info/request";
+const char* mqtt_client_id = "cerber-" DEVICE_ID;
+const char* mqtt_command_topic = "cerber/" DEVICE_ID "/command";
+const char* mqtt_status_topic = "cerber/" DEVICE_ID "/status";
+const char* mqtt_ack_topic = "cerber/" DEVICE_ID "/ack";
+const char* mqtt_info_topic = "cerber/" DEVICE_ID "/info";
+const char* mqtt_info_request_topic = "cerber/" DEVICE_ID "/info/request";
 
-// Network name shown as the OTA port in Arduino IDE
-const char* ota_hostname = "cerber-toyota";
+const char* ota_hostname = OTA_HOSTNAME;
 
 // Prefix for serial log messages
-const char* LOG_TAG = "TOYOTA";
+const char* LOG_TAG = DEVICE_LABEL;
 
 // ===================== PINS =====================
-// ESP32U - safer than GPIO12
-#define RELAY_PIN 26
+// Can be overridden per gate in platformio.ini (-D RELAY_PIN=...).
+#ifndef RELAY_PIN
+#define RELAY_PIN 26 // ESP32U - safer than GPIO12
+#endif
+#ifndef LED_PIN
 #define LED_PIN 13
+#endif
 
 // Most relay modules are active LOW
 #define RELAY_ACTIVE LOW
@@ -68,6 +84,10 @@ const unsigned long INFO_INTERVAL_MS = 10000;
 const unsigned long INFO_REQUEST_TIMEOUT_MS = 60000; // the app re-requests every 30 s
 
 bool otaStarted = false;
+
+// ===================== DECLARATIONS =====================
+void publishDeviceInfo();
+void handleInfoRequest();
 
 // ===================== RELAY =====================
 void startRelayPulse() {
@@ -285,7 +305,7 @@ void handleDeviceInfo() {
 // ===================== OTA =====================
 void startOta() {
   if (strlen(OTA_PASSWORD) == 0) {
-    Serial.println("OTA disabled - set OTA_PASSWORD in secrets.development.h.");
+    Serial.println("OTA disabled - set OTA_PASSWORD_" DEVICE_LABEL " in secrets.development.h.");
     otaStarted = true; // do not retry
     return;
   }

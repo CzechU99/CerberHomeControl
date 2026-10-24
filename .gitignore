@@ -1,8 +1,7 @@
 # Secrets - real credentials (template: secrets.h)
 **/secrets.development.h
 
-# Firmware (Arduino IDE / PlatformIO)
-firmware/**/build/
+# Firmware (PlatformIO)
 .pio/
 
 # IDE
