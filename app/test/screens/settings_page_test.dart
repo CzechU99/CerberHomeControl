@@ -42,7 +42,7 @@ void main() {
 
     expect(find.text('broker.example.com'), findsOneWidget);
     expect(find.text('secret'), findsOneWidget);
-    expect(find.text('Wersja 1.0.0'), findsOneWidget);
+    expect(find.text('Wersja 1.0.0 (1)'), findsOneWidget);
   });
 
   testWidgets('saving keeps the password when only the client id changes', (

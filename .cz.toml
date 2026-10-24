@@ -9,5 +9,6 @@ version_files = [
     "app/pubspec.yaml:^version:",
     "firmware/include/version.h:FIRMWARE_VERSION",
 ]
+pre_bump_hooks = ["python scripts/set_build_number.py"]
 update_changelog_on_bump = true
 changelog_file = "CHANGELOG.md"

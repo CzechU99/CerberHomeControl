@@ -43,7 +43,9 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<void> _loadAppVersion() async {
     final info = await PackageInfo.fromPlatform();
     if (!mounted) return;
-    setState(() => _appVersion = 'Wersja ${info.version}');
+    setState(
+      () => _appVersion = 'Wersja ${info.version} (${info.buildNumber})',
+    );
   }
 
   Future<void> _loadSettings() async {
