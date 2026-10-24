@@ -5,6 +5,12 @@ version = "1.0.0"
 version_scheme = "semver2"
 tag_format = "v$version"
 annotated_tag = true
-version_files = ["app/pubspec.yaml:^version:"]
+version_files = [
+    "app/pubspec.yaml:^version:",
+    "firmware/honda/honda.ino:FIRMWARE_VERSION",
+    "firmware/hyundai/hyundai.ino:FIRMWARE_VERSION",
+    "firmware/toyota/toyota.ino:FIRMWARE_VERSION",
+    "firmware/main_gate/main_gate.ino:FIRMWARE_VERSION",
+]
 update_changelog_on_bump = true
 changelog_file = "CHANGELOG.md"

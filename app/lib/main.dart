@@ -78,6 +78,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       1 => StatusPage(
         isBrokerConnected: _mqtt.isBrokerConnected,
         gateOnline: _mqtt.gateOnline,
+        deviceInfo: _mqtt.deviceInfo,
       ),
       _ => SettingsPage(onSave: _mqtt.connect),
     };

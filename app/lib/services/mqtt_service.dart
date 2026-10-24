@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:mqtt_client/mqtt_client.dart';
 import 'package:mqtt_client/mqtt_server_client.dart';
 
+import '../models/device_info.dart';
 import '../models/gate.dart';
 import '../models/mqtt_settings.dart';
 import 'command_tracker.dart';
@@ -11,10 +12,14 @@ import 'command_tracker.dart';
 class MqttService extends ChangeNotifier {
   static const _retryDelay = Duration(seconds: 10);
 
+  /// Must stay below INFO_REQUEST_TIMEOUT_MS in the firmware.
+  static const _infoRequestInterval = Duration(seconds: 30);
+
   MqttServerClient? _client;
   StreamSubscription<List<MqttReceivedMessage<MqttMessage>>>? _updates;
   MqttSettings? _settings;
   Timer? _retryTimer;
+  Timer? _infoRequestTimer;
   bool _hasConnected = false;
   bool _isPaused = false;
 
@@ -22,10 +27,12 @@ class MqttService extends ChangeNotifier {
   final Map<String, bool> _gateOnline = {
     for (final gate in gates) gate.id: false,
   };
+  final Map<String, DeviceInfo> _deviceInfo = {};
   late final _commands = CommandTracker(onChanged: notifyListeners);
 
   bool get isBrokerConnected => _isBrokerConnected;
   Map<String, bool> get gateOnline => Map.unmodifiable(_gateOnline);
+  Map<String, DeviceInfo> get deviceInfo => Map.unmodifiable(_deviceInfo);
   Map<String, CommandStatus> get commandStatuses => {
     for (final gate in gates) gate.id: _commands.statusOf(gate.id),
   };
@@ -54,6 +61,9 @@ class MqttService extends ChangeNotifier {
     client.onAutoReconnect = () {
       if (isCurrent()) _setBrokerConnected(false);
     };
+    client.onAutoReconnected = () {
+      if (isCurrent()) _startInfoRequests();
+    };
     client.onDisconnected = () {
       if (isCurrent()) _setBrokerConnected(false);
     };
@@ -81,13 +91,16 @@ class MqttService extends ChangeNotifier {
     for (final gate in gates) {
       client.subscribe(gate.statusTopic, MqttQos.atLeastOnce);
       client.subscribe(gate.ackTopic, MqttQos.atLeastOnce);
+      client.subscribe(gate.infoTopic, MqttQos.atLeastOnce);
     }
     _updates = client.updates?.listen(handleMessages);
+    _startInfoRequests();
   }
 
   void pause() {
     _isPaused = true;
     _retryTimer?.cancel();
+    _infoRequestTimer?.cancel();
   }
 
   void resume() {
@@ -102,16 +115,36 @@ class MqttService extends ChangeNotifier {
   }
 
   void openGate(Gate gate) {
-    final client = _client;
-    if (client == null || !_isBrokerConnected) return;
+    if (_publish(gate.commandTopic, gateStartCommand, MqttQos.atLeastOnce)) {
+      _commands.start(gate.id);
+    }
+  }
 
-    final builder = MqttClientPayloadBuilder()..addString(gateStartCommand);
-    client.publishMessage(
-      gate.commandTopic,
-      MqttQos.atLeastOnce,
-      builder.payload!,
+  bool _publish(String topic, String message, MqttQos qos) {
+    final client = _client;
+    if (client == null || !_isBrokerConnected) return false;
+
+    final builder = MqttClientPayloadBuilder()..addString(message);
+    client.publishMessage(topic, qos, builder.payload!);
+    return true;
+  }
+
+  /// Keeps the ESPs publishing device info while the app is in use.
+  void _startInfoRequests() {
+    _infoRequestTimer?.cancel();
+    if (_isPaused) return;
+
+    _requestDeviceInfo();
+    _infoRequestTimer = Timer.periodic(
+      _infoRequestInterval,
+      (_) => _requestDeviceInfo(),
     );
-    _commands.start(gate.id);
+  }
+
+  void _requestDeviceInfo() {
+    for (final gate in gates) {
+      _publish(gate.infoRequestTopic, infoRequestMessage, MqttQos.atMostOnce);
+    }
   }
 
   @visibleForTesting
@@ -130,6 +163,9 @@ class MqttService extends ChangeNotifier {
             gate.id,
             accepted: payload == commandAcceptedAck,
           );
+        } else if (message.topic == gate.infoTopic) {
+          final info = DeviceInfo.tryParse(payload);
+          if (info != null) _deviceInfo[gate.id] = info;
         }
       }
     }
@@ -158,6 +194,7 @@ class MqttService extends ChangeNotifier {
 
   void _closeConnection() {
     _retryTimer?.cancel();
+    _infoRequestTimer?.cancel();
     _updates?.cancel();
     _updates = null;
     _hasConnected = false;

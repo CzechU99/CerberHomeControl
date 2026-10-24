@@ -3,18 +3,26 @@
 // ONLINE / OFFLINE (retained, OFFLINE via Last Will) on the status topic.
 // Each command is answered on the ack topic with "OK" (relay on) or
 // "BUSY" (pulse already in progress).
+// Device info is published on connect and, while the app keeps sending
+// requests on the info request topic, every 10 s.
 
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include <WiFiClientSecure.h>
+#include <esp_timer.h>
+#include <time.h>
 #include "secrets.h" // credentials live in secrets.development.h (not in the repo)
 #include "ca_cert.h"
 
 // ===================== DEVICE =====================
+#define FIRMWARE_VERSION "1.0.0"
+
 const char* mqtt_client_id = "cerber-toyota";
 const char* mqtt_command_topic = "cerber/toyota/command";
 const char* mqtt_status_topic = "cerber/toyota/status";
 const char* mqtt_ack_topic = "cerber/toyota/ack";
+const char* mqtt_info_topic = "cerber/toyota/info";
+const char* mqtt_info_request_topic = "cerber/toyota/info/request";
 
 // Prefix for serial log messages
 const char* LOG_TAG = "TOYOTA";
@@ -47,6 +55,12 @@ const unsigned long WIFI_RECONNECT_INTERVAL_MS = 10000;
 
 unsigned long wifiLostAt = 0;
 const unsigned long WIFI_RESTART_AFTER_MS = 120000; // restart after 2 minutes without Wi-Fi
+
+unsigned long lastInfoAt = 0;
+unsigned long lastInfoRequestAt = 0;
+bool infoRequested = false;
+const unsigned long INFO_INTERVAL_MS = 10000;
+const unsigned long INFO_REQUEST_TIMEOUT_MS = 60000; // the app re-requests every 30 s
 
 // ===================== RELAY =====================
 void startRelayPulse() {
@@ -158,6 +172,8 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
 
   if (strcmp(topic, mqtt_command_topic) == 0 && msg == "START") {
     startRelayPulse();
+  } else if (strcmp(topic, mqtt_info_request_topic) == 0) {
+    handleInfoRequest();
   }
 }
 
@@ -182,8 +198,10 @@ bool reconnectMqttOnce() {
     Serial.println("MQTT connected.");
 
     client.subscribe(mqtt_command_topic);
+    client.subscribe(mqtt_info_request_topic);
 
     client.publish(mqtt_status_topic, "ONLINE", true);
+    publishDeviceInfo();
 
     Serial.print("Subscribed to: ");
     Serial.println(mqtt_command_topic);
@@ -211,6 +229,52 @@ void handleMqtt() {
   }
 }
 
+// ===================== DEVICE INFO =====================
+void publishDeviceInfo() {
+  time_t now = time(nullptr);
+  long long epoch = now > 1700000000 ? (long long)now : 0; // 0 until NTP sync
+
+  char payload[192];
+  snprintf(
+    payload,
+    sizeof(payload),
+    "{\"firmware\":\"%s\",\"rssi\":%d,\"uptime\":%lld,\"ip\":\"%s\",\"time\":%lld}",
+    FIRMWARE_VERSION,
+    WiFi.RSSI(),
+    (long long)(esp_timer_get_time() / 1000000),
+    WiFi.localIP().toString().c_str(),
+    epoch
+  );
+
+  client.publish(mqtt_info_topic, payload, true);
+  lastInfoAt = millis();
+}
+
+void handleInfoRequest() {
+  bool wasRequested = infoRequested;
+  infoRequested = true;
+  lastInfoRequestAt = millis();
+
+  if (!wasRequested) {
+    publishDeviceInfo();
+  }
+}
+
+void handleDeviceInfo() {
+  if (!infoRequested || !client.connected()) {
+    return;
+  }
+
+  if (millis() - lastInfoRequestAt >= INFO_REQUEST_TIMEOUT_MS) {
+    infoRequested = false;
+    return;
+  }
+
+  if (millis() - lastInfoAt >= INFO_INTERVAL_MS) {
+    publishDeviceInfo();
+  }
+}
+
 // ===================== SETUP =====================
 void setup() {
   Serial.begin(115200);
@@ -223,6 +287,7 @@ void setup() {
   digitalWrite(LED_PIN, LOW);
 
   setupWiFi();
+  configTime(0, 0, "pool.ntp.org", "time.google.com");
 
   espClient.setCACert(MQTT_CA_CERT);
 
@@ -237,4 +302,5 @@ void loop() {
   handleWiFi();
   handleMqtt();
   handleRelayPulse();
+  handleDeviceInfo();
 }
