@@ -53,7 +53,8 @@ const char* LOG_TAG = DEVICE_LABEL;
 #ifndef RELAY_PIN
 #define RELAY_PIN 26 // ESP32U - safer than GPIO12
 #endif
-#ifndef LED_PIN
+// Wi-Fi status LED; a gate without one sets -D NO_STATUS_LED.
+#if !defined(NO_STATUS_LED) && !defined(LED_PIN)
 #define LED_PIN 13
 #endif
 
@@ -129,6 +130,15 @@ void handleRelayPulse() {
   }
 }
 
+// ===================== STATUS LED =====================
+void setStatusLed(bool on) {
+#ifdef LED_PIN
+  digitalWrite(LED_PIN, on ? HIGH : LOW);
+#else
+  (void)on; // this gate has no status LED
+#endif
+}
+
 // ===================== WIFI =====================
 void setupWiFi() {
   WiFi.mode(WIFI_STA);
@@ -156,23 +166,23 @@ void setupWiFi() {
     Serial.print("RSSI: ");
     Serial.println(WiFi.RSSI());
 
-    digitalWrite(LED_PIN, HIGH);
+    setStatusLed(true);
     wifiLostAt = 0;
   } else {
     Serial.println();
     Serial.println("Wi-Fi connection failed in setup(). Will keep retrying in loop().");
-    digitalWrite(LED_PIN, LOW);
+    setStatusLed(false);
   }
 }
 
 void handleWiFi() {
   if (WiFi.status() == WL_CONNECTED) {
-    digitalWrite(LED_PIN, HIGH);
+    setStatusLed(true);
     wifiLostAt = 0;
     return;
   }
 
-  digitalWrite(LED_PIN, LOW);
+  setStatusLed(false);
 
   if (wifiLostAt == 0) {
     wifiLostAt = millis();
@@ -454,8 +464,10 @@ void setup() {
   pinMode(RELAY_PIN, OUTPUT);
   digitalWrite(RELAY_PIN, RELAY_INACTIVE);
 
+#ifdef LED_PIN
   pinMode(LED_PIN, OUTPUT);
-  digitalWrite(LED_PIN, LOW);
+#endif
+  setStatusLed(false);
 
   beginOtaTrial();
   setupWiFi();
