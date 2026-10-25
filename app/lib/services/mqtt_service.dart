@@ -37,6 +37,8 @@ class MqttService extends ChangeNotifier {
     for (final gate in gates) gate.id: _commands.statusOf(gate.id),
   };
 
+  set ackTimeout(Duration value) => _commands.ackTimeout = value;
+
   Future<void> connect(MqttSettings settings) async {
     _closeConnection();
     _settings = settings;

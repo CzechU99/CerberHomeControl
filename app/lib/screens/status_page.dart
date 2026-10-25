@@ -7,11 +7,13 @@ import '../utils/device_info_format.dart';
 class StatusPage extends StatelessWidget {
   const StatusPage({
     super.key,
+    required this.gates,
     required this.isBrokerConnected,
     required this.gateOnline,
     required this.deviceInfo,
   });
 
+  final List<Gate> gates;
   final bool isBrokerConnected;
   final Map<String, bool> gateOnline;
   final Map<String, DeviceInfo> deviceInfo;

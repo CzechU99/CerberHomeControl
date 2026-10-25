@@ -21,6 +21,6 @@ void main() {
     await tester.pumpWidget(const CerberApp());
     await tester.pumpAndSettle();
 
-    expect(find.text('Ustawienia MQTT'), findsOneWidget);
+    expect(find.text('Broker URL'), findsOneWidget);
   });
 }

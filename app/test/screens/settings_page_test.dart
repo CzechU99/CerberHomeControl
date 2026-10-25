@@ -1,3 +1,5 @@
+import 'package:cerber/models/app_settings.dart';
+import 'package:cerber/models/gate.dart';
 import 'package:cerber/models/mqtt_settings.dart';
 import 'package:cerber/screens/settings_page.dart';
 import 'package:flutter/material.dart';
@@ -27,15 +29,56 @@ void main() {
 
   Future<void> pumpSettingsPage(
     WidgetTester tester,
-    Future<void> Function(MqttSettings) onSave,
-  ) async {
+    Future<void> Function(MqttSettings) onSave, {
+    AppSettings appSettings = const AppSettings(),
+    ValueChanged<AppSettings>? onAppSettingsChanged,
+  }) async {
     await tester.pumpWidget(
       MaterialApp(
-        home: Scaffold(body: SettingsPage(onSave: onSave)),
+        home: Scaffold(
+          body: SettingsPage(
+            onSaveMqtt: onSave,
+            appSettings: appSettings,
+            onAppSettingsChanged: onAppSettingsChanged ?? (_) {},
+          ),
+        ),
       ),
     );
     await tester.pumpAndSettle();
   }
+
+  Future<void> openGeneralSection(WidgetTester tester) async {
+    await tester.tap(find.text('MQTT'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Ogólne').last);
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('switches between MQTT and general settings', (tester) async {
+    await pumpSettingsPage(tester, (_) async {});
+    expect(find.text('Broker URL'), findsOneWidget);
+
+    await openGeneralSection(tester);
+
+    expect(find.text('Czas przytrzymania'), findsOneWidget);
+    expect(find.text('Broker URL'), findsNothing);
+  });
+
+  testWidgets('general settings report changes', (tester) async {
+    AppSettings? changed;
+    await pumpSettingsPage(
+      tester,
+      (_) async {},
+      onAppSettingsChanged: (settings) => changed = settings,
+    );
+    await openGeneralSection(tester);
+
+    await tester.tap(find.text('Wibracje'));
+    expect(changed?.vibrationEnabled, isFalse);
+
+    await tester.tap(find.text(gates.first.statusLabel));
+    expect(changed?.isGateVisible(gates.first.id), isFalse);
+  });
 
   testWidgets('shows saved broker and password', (tester) async {
     await pumpSettingsPage(tester, (_) async {});

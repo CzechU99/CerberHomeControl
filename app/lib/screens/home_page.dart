@@ -7,19 +7,35 @@ import '../services/command_tracker.dart';
 class HomePage extends StatelessWidget {
   const HomePage({
     super.key,
+    required this.gates,
     required this.onOpenGate,
     required this.isBrokerConnected,
     required this.gateOnline,
     required this.commandStatuses,
+    required this.holdDuration,
+    required this.vibrationEnabled,
   });
 
+  final List<Gate> gates;
   final void Function(Gate gate) onOpenGate;
   final bool isBrokerConnected;
   final Map<String, bool> gateOnline;
   final Map<String, CommandStatus> commandStatuses;
+  final Duration holdDuration;
+  final bool vibrationEnabled;
 
   @override
   Widget build(BuildContext context) {
+    if (gates.isEmpty) {
+      return const Center(
+        child: Text(
+          'Wszystkie bramy są ukryte.\nWłącz je w Ustawienia → Ogólne.',
+          textAlign: TextAlign.center,
+          style: TextStyle(color: Colors.grey),
+        ),
+      );
+    }
+
     return Padding(
       padding: const EdgeInsets.all(20),
       child: Column(
@@ -27,9 +43,12 @@ class HomePage extends StatelessWidget {
         children: [
           for (final gate in gates)
             _GateButton(
+              key: ValueKey(gate.id),
               gate: gate,
               isAvailable: isBrokerConnected && (gateOnline[gate.id] ?? false),
               commandStatus: commandStatuses[gate.id] ?? CommandStatus.idle,
+              holdDuration: holdDuration,
+              vibrationEnabled: vibrationEnabled,
               onOpen: () => onOpenGate(gate),
             ),
         ],
@@ -40,27 +59,46 @@ class HomePage extends StatelessWidget {
 
 class _GateButton extends StatefulWidget {
   const _GateButton({
+    super.key,
     required this.gate,
     required this.isAvailable,
     required this.commandStatus,
+    required this.holdDuration,
+    required this.vibrationEnabled,
     required this.onOpen,
   });
 
   final Gate gate;
   final bool isAvailable;
   final CommandStatus commandStatus;
+  final Duration holdDuration;
+  final bool vibrationEnabled;
   final VoidCallback onOpen;
 
   @override
   State<_GateButton> createState() => _GateButtonState();
 }
 
-class _GateButtonState extends State<_GateButton> {
+class _GateButtonState extends State<_GateButton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _hold = AnimationController(
+    vsync: this,
+    duration: widget.holdDuration,
+  )..addStatusListener(_onHoldStatus);
+
+  bool get _isEnabled =>
+      widget.isAvailable && widget.commandStatus != CommandStatus.pending;
+
   @override
   void didUpdateWidget(_GateButton oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.commandStatus == widget.commandStatus) return;
+    _hold.duration = widget.holdDuration;
+    if (!_isEnabled) _hold.reset();
 
+    if (oldWidget.commandStatus == widget.commandStatus ||
+        !widget.vibrationEnabled) {
+      return;
+    }
     switch (widget.commandStatus) {
       case CommandStatus.confirmed:
         HapticFeedback.mediumImpact();
@@ -69,6 +107,38 @@ class _GateButtonState extends State<_GateButton> {
       case CommandStatus.idle || CommandStatus.pending:
         break;
     }
+  }
+
+  @override
+  void dispose() {
+    _hold.dispose();
+    super.dispose();
+  }
+
+  void _onHoldStatus(AnimationStatus status) {
+    if (status != AnimationStatus.completed) return;
+
+    if (widget.vibrationEnabled) HapticFeedback.vibrate();
+    widget.onOpen();
+    _hold.reset();
+  }
+
+  void _startHold() {
+    if (_isEnabled) _hold.forward(from: 0);
+  }
+
+  void _endHold() {
+    if (!_hold.isAnimating) return;
+
+    _hold.reset();
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        const SnackBar(
+          content: Text('Przytrzymaj przycisk, aby otworzyć bramę'),
+          duration: Duration(seconds: 2),
+        ),
+      );
   }
 
   Widget? _buildStatusIcon() {
@@ -91,45 +161,57 @@ class _GateButtonState extends State<_GateButton> {
     };
   }
 
-  void _showHoldHint() {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        const SnackBar(
-          content: Text('Przytrzymaj przycisk, aby otworzyć bramę'),
-          duration: Duration(seconds: 2),
-        ),
-      );
-  }
-
   @override
   Widget build(BuildContext context) {
-    final isEnabled =
-        widget.isAvailable && widget.commandStatus != CommandStatus.pending;
+    final isEnabled = _isEnabled;
     final statusIcon = _buildStatusIcon();
 
-    return ElevatedButton(
-      style: ElevatedButton.styleFrom(
-        minimumSize: const Size(double.infinity, 60),
-        backgroundColor: Colors.blue,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
-      ),
-      onPressed: isEnabled ? _showHoldHint : null,
-      onLongPress: isEnabled ? widget.onOpen : null,
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        spacing: 12,
-        children: [
-          Text(
-            widget.gate.buttonLabel,
-            style: const TextStyle(
-              fontSize: 25,
-              color: Colors.white,
-              letterSpacing: 1,
+    return Semantics(
+      button: true,
+      enabled: isEnabled,
+      label: widget.gate.buttonLabel,
+      hint: 'Przytrzymaj, aby otworzyć',
+      child: Listener(
+        onPointerDown: (_) => _startHold(),
+        onPointerUp: (_) => _endHold(),
+        onPointerCancel: (_) => _endHold(),
+        child: Material(
+          color: isEnabled ? Colors.blue : Colors.white12,
+          borderRadius: BorderRadius.circular(5),
+          clipBehavior: Clip.antiAlias,
+          child: SizedBox(
+            height: 60,
+            child: Stack(
+              children: [
+                AnimatedBuilder(
+                  animation: _hold,
+                  builder: (context, _) => FractionallySizedBox(
+                    widthFactor: _hold.value,
+                    heightFactor: 1,
+                    child: const ColoredBox(color: Colors.lightBlueAccent),
+                  ),
+                ),
+                Center(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    spacing: 12,
+                    children: [
+                      Text(
+                        widget.gate.buttonLabel,
+                        style: TextStyle(
+                          fontSize: 25,
+                          color: isEnabled ? Colors.white : Colors.white38,
+                          letterSpacing: 1,
+                        ),
+                      ),
+                      ?statusIcon,
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
-          ?statusIcon,
-        ],
+        ),
       ),
     );
   }

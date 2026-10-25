@@ -12,8 +12,9 @@ class CommandTracker {
   });
 
   final VoidCallback onChanged;
-  final Duration ackTimeout;
   final Duration resultDuration;
+
+  Duration ackTimeout;
 
   final Map<String, CommandStatus> _statuses = {};
   final Map<String, Timer> _timers = {};
