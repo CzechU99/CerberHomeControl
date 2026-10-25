@@ -41,6 +41,14 @@
 #define MQTT_PASSWORD CERBER_CONCAT(MQTT_PASSWORD_, DEVICE_KEY)
 #define OTA_PASSWORD CERBER_CONCAT(OTA_PASSWORD_, DEVICE_KEY)
 
+// Wi-Fi network of this gate: -D WIFI_NETWORK=PRIMARY or SECONDARY
+// in platformio.ini, picking WIFI_SSID_<NETWORK> from the secrets.
+#ifndef WIFI_NETWORK
+#define WIFI_NETWORK PRIMARY
+#endif
+#define WIFI_SSID CERBER_CONCAT(WIFI_SSID_, WIFI_NETWORK)
+#define WIFI_PASSWORD CERBER_CONCAT(WIFI_PASSWORD_, WIFI_NETWORK)
+
 const char* mqtt_client_id = "cerber-" DEVICE_ID;
 const char* mqtt_command_topic = "cerber/" DEVICE_ID "/command";
 const char* mqtt_status_topic = "cerber/" DEVICE_ID "/status";
