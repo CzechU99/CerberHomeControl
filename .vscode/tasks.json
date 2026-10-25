@@ -1,0 +1,118 @@
+{
+  // Run with Ctrl+Shift+P -> "Tasks: Run Task" (Ctrl+Shift+B runs the default build).
+  // Firmware tasks use the PlatformIO CLI installed by the PlatformIO IDE extension,
+  // which is added to PATH below because it is not on the system PATH.
+  "version": "2.0.0",
+  "options": {
+    "env": {
+      "PATH": "${userHome}/.platformio/penv/bin:${env:PATH}"
+    }
+  },
+  "windows": {
+    "options": {
+      "env": {
+        "PATH": "${userHome}\\.platformio\\penv\\Scripts;${env:PATH}"
+      }
+    }
+  },
+  "inputs": [
+    {
+      "id": "gate",
+      "type": "pickString",
+      "description": "Brama",
+      "options": ["honda", "hyundai", "toyota", "main_gate"]
+    },
+    {
+      "id": "port",
+      "type": "promptString",
+      "description": "Port szeregowy (np. COM3)",
+      "default": "COM3"
+    }
+  ],
+  "tasks": [
+    {
+      "label": "Firmware: Build all gates",
+      "type": "shell",
+      "command": "pio",
+      "args": ["run"],
+      "options": { "cwd": "${workspaceFolder}/firmware" },
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "Firmware: Build gate",
+      "type": "shell",
+      "command": "pio",
+      "args": ["run", "-e", "${input:gate}"],
+      "options": { "cwd": "${workspaceFolder}/firmware" },
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "Firmware: Upload over USB",
+      "type": "shell",
+      "command": "pio",
+      "args": ["run", "-e", "${input:gate}", "-t", "upload", "--upload-port", "${input:port}"],
+      "options": { "cwd": "${workspaceFolder}/firmware" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Firmware: Upload over Wi-Fi (OTA)",
+      "type": "shell",
+      "command": "pio",
+      "args": ["run", "-e", "${input:gate}-ota", "-t", "upload"],
+      "options": { "cwd": "${workspaceFolder}/firmware" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Firmware: Serial monitor",
+      "type": "shell",
+      "command": "pio",
+      "args": ["device", "monitor", "--port", "${input:port}"],
+      "options": { "cwd": "${workspaceFolder}/firmware" },
+      "presentation": { "panel": "dedicated", "focus": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "Firmware: List serial ports",
+      "type": "shell",
+      "command": "pio",
+      "args": ["device", "list", "--serial"],
+      "options": { "cwd": "${workspaceFolder}/firmware" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Firmware: Check board (chip and flash)",
+      "type": "shell",
+      "command": "pio",
+      "args": ["pkg", "exec", "-p", "tool-esptoolpy", "--", "esptool.py", "--port", "${input:port}", "flash_id"],
+      "options": { "cwd": "${workspaceFolder}/firmware" },
+      "problemMatcher": []
+    },
+    {
+      "label": "App: Analyze",
+      "type": "shell",
+      "command": "flutter",
+      "args": ["analyze"],
+      "options": { "cwd": "${workspaceFolder}/app" },
+      "problemMatcher": []
+    },
+    {
+      "label": "App: Test",
+      "type": "shell",
+      "command": "flutter",
+      "args": ["test"],
+      "options": { "cwd": "${workspaceFolder}/app" },
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "App: Build release APK",
+      "type": "shell",
+      "command": "flutter",
+      "args": ["build", "apk", "--release"],
+      "options": { "cwd": "${workspaceFolder}/app" },
+      "problemMatcher": []
+    }
+  ]
+}

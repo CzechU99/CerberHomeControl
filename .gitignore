@@ -3,10 +3,14 @@
 
 # Firmware (PlatformIO)
 .pio/
+*.local.ini
 
-# IDE
+# IDE (shared VS Code tasks are committed)
 .idea/
-.vscode/
+.vscode/*
+!.vscode/tasks.json
+app/.vscode/
+firmware/.vscode/
 *.iml
 
 # System
