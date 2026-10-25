@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../models/gate.dart';
 import '../services/command_tracker.dart';
+import '../services/haptics.dart';
 
 class HomePage extends StatelessWidget {
   const HomePage({
@@ -101,9 +101,9 @@ class _GateButtonState extends State<_GateButton>
     }
     switch (widget.commandStatus) {
       case CommandStatus.confirmed:
-        HapticFeedback.mediumImpact();
+        Haptics.commandConfirmed();
       case CommandStatus.failed:
-        HapticFeedback.heavyImpact();
+        Haptics.commandFailed();
       case CommandStatus.idle || CommandStatus.pending:
         break;
     }
@@ -118,7 +118,7 @@ class _GateButtonState extends State<_GateButton>
   void _onHoldStatus(AnimationStatus status) {
     if (status != AnimationStatus.completed) return;
 
-    if (widget.vibrationEnabled) HapticFeedback.vibrate();
+    if (widget.vibrationEnabled) Haptics.gateOpening();
     widget.onOpen();
     _hold.reset();
   }
