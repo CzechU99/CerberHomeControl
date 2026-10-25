@@ -63,27 +63,48 @@ void main() {
     expect(find.text(hint), findsOneWidget);
   });
 
-  testWidgets('shows progress and ignores holds while waiting for ack', (
-    tester,
-  ) async {
+  testWidgets('ignores holds while waiting for ack', (tester) async {
     final opened = await pumpHomePage(
       tester,
       hondaStatus: CommandStatus.pending,
     );
 
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
-
     await holdHonda(tester, holdDuration + const Duration(milliseconds: 50));
     expect(opened, isEmpty);
   });
 
-  testWidgets('shows the result of the command', (tester) async {
-    await pumpHomePage(tester, hondaStatus: CommandStatus.confirmed);
-    expect(find.byIcon(Icons.check_circle), findsOneWidget);
+  FadeTransition flash(WidgetTester tester) =>
+      tester.widget(find.byKey(const ValueKey('gate-button-flash')).first);
 
-    await pumpHomePage(tester, hondaStatus: CommandStatus.failed);
-    expect(find.byIcon(Icons.error), findsOneWidget);
-  });
+  Color flashColor(WidgetTester tester) => tester
+      .widget<ColoredBox>(
+        find
+            .descendant(
+              of: find.byKey(const ValueKey('gate-button-flash')).first,
+              matching: find.byType(ColoredBox),
+            )
+            .first,
+      )
+      .color;
+
+  for (final (status, color) in [
+    (CommandStatus.confirmed, Colors.green),
+    (CommandStatus.failed, Colors.red),
+  ]) {
+    testWidgets('blinks ${status.name} result', (tester) async {
+      await pumpHomePage(tester, hondaStatus: CommandStatus.pending);
+      expect(flash(tester).opacity.value, 0);
+
+      await pumpHomePage(tester, hondaStatus: status);
+      await tester.pump(const Duration(milliseconds: 225));
+
+      expect(flash(tester).opacity.value, greaterThan(0.5));
+      expect(flashColor(tester), color);
+
+      await tester.pumpAndSettle();
+      expect(flash(tester).opacity.value, 0);
+    });
+  }
 
   testWidgets('shows only the visible gates', (tester) async {
     await pumpHomePage(tester, visibleGates: [honda]);

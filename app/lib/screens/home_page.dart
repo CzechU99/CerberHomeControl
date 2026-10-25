@@ -80,30 +80,43 @@ class _GateButton extends StatefulWidget {
 }
 
 class _GateButtonState extends State<_GateButton>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
+  static const _flashDuration = Duration(milliseconds: 900);
+
   late final AnimationController _hold = AnimationController(
     vsync: this,
     duration: widget.holdDuration,
   )..addStatusListener(_onHoldStatus);
 
-  bool get _isEnabled =>
-      widget.isAvailable && widget.commandStatus != CommandStatus.pending;
+  late final AnimationController _flash = AnimationController(
+    vsync: this,
+    duration: _flashDuration,
+  );
+  late final Animation<double> _flashOpacity = TweenSequence([
+    for (var i = 0; i < 2; i++) ...[
+      TweenSequenceItem(tween: Tween(begin: 0.0, end: 1.0), weight: 1),
+      TweenSequenceItem(tween: Tween(begin: 1.0, end: 0.0), weight: 1),
+    ],
+  ]).animate(_flash);
+  Color _flashColor = Colors.green;
+
+  bool get _isPending => widget.commandStatus == CommandStatus.pending;
+  bool get _canHold => widget.isAvailable && !_isPending;
 
   @override
   void didUpdateWidget(_GateButton oldWidget) {
     super.didUpdateWidget(oldWidget);
     _hold.duration = widget.holdDuration;
-    if (!_isEnabled) _hold.reset();
+    if (!_canHold) _hold.reset();
 
-    if (oldWidget.commandStatus == widget.commandStatus ||
-        !widget.vibrationEnabled) {
-      return;
-    }
+    if (oldWidget.commandStatus == widget.commandStatus) return;
     switch (widget.commandStatus) {
       case CommandStatus.confirmed:
-        Haptics.commandConfirmed();
+        _showResult(Colors.green);
+        if (widget.vibrationEnabled) Haptics.commandConfirmed();
       case CommandStatus.failed:
-        Haptics.commandFailed();
+        _showResult(Colors.red);
+        if (widget.vibrationEnabled) Haptics.commandFailed();
       case CommandStatus.idle || CommandStatus.pending:
         break;
     }
@@ -112,7 +125,13 @@ class _GateButtonState extends State<_GateButton>
   @override
   void dispose() {
     _hold.dispose();
+    _flash.dispose();
     super.dispose();
+  }
+
+  void _showResult(Color color) {
+    _flashColor = color;
+    _flash.forward(from: 0);
   }
 
   void _onHoldStatus(AnimationStatus status) {
@@ -124,7 +143,7 @@ class _GateButtonState extends State<_GateButton>
   }
 
   void _startHold() {
-    if (_isEnabled) _hold.forward(from: 0);
+    if (_canHold) _hold.forward(from: 0);
   }
 
   void _endHold() {
@@ -141,34 +160,13 @@ class _GateButtonState extends State<_GateButton>
       );
   }
 
-  Widget? _buildStatusIcon() {
-    return switch (widget.commandStatus) {
-      CommandStatus.pending => const SizedBox.square(
-        dimension: 24,
-        child: CircularProgressIndicator(strokeWidth: 3, color: Colors.white),
-      ),
-      CommandStatus.confirmed => const Icon(
-        Icons.check_circle,
-        color: Colors.greenAccent,
-        size: 28,
-      ),
-      CommandStatus.failed => const Icon(
-        Icons.error,
-        color: Colors.orangeAccent,
-        size: 28,
-      ),
-      CommandStatus.idle => null,
-    };
-  }
-
   @override
   Widget build(BuildContext context) {
-    final isEnabled = _isEnabled;
-    final statusIcon = _buildStatusIcon();
+    final isAvailable = widget.isAvailable;
 
     return Semantics(
       button: true,
-      enabled: isEnabled,
+      enabled: _canHold,
       label: widget.gate.buttonLabel,
       hint: 'Przytrzymaj, aby otworzyć',
       child: Listener(
@@ -176,36 +174,38 @@ class _GateButtonState extends State<_GateButton>
         onPointerUp: (_) => _endHold(),
         onPointerCancel: (_) => _endHold(),
         child: Material(
-          color: isEnabled ? Colors.blue : Colors.white12,
+          color: isAvailable ? Colors.blue : Colors.white12,
           borderRadius: BorderRadius.circular(5),
           clipBehavior: Clip.antiAlias,
           child: SizedBox(
             height: 60,
             child: Stack(
+              fit: StackFit.expand,
               children: [
-                AnimatedBuilder(
-                  animation: _hold,
-                  builder: (context, _) => FractionallySizedBox(
-                    widthFactor: _hold.value,
-                    heightFactor: 1,
-                    child: const ColoredBox(color: Colors.lightBlueAccent),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: AnimatedBuilder(
+                    animation: _hold,
+                    builder: (context, _) => FractionallySizedBox(
+                      widthFactor: _isPending ? 1 : _hold.value,
+                      heightFactor: 1,
+                      child: const ColoredBox(color: Colors.lightBlueAccent),
+                    ),
                   ),
                 ),
+                FadeTransition(
+                  key: const ValueKey('gate-button-flash'),
+                  opacity: _flashOpacity,
+                  child: ColoredBox(color: _flashColor),
+                ),
                 Center(
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    spacing: 12,
-                    children: [
-                      Text(
-                        widget.gate.buttonLabel,
-                        style: TextStyle(
-                          fontSize: 25,
-                          color: isEnabled ? Colors.white : Colors.white38,
-                          letterSpacing: 1,
-                        ),
-                      ),
-                      ?statusIcon,
-                    ],
+                  child: Text(
+                    widget.gate.buttonLabel,
+                    style: TextStyle(
+                      fontSize: 25,
+                      color: isAvailable ? Colors.white : Colors.white38,
+                      letterSpacing: 1,
+                    ),
                   ),
                 ),
               ],
