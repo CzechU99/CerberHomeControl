@@ -1,5 +1,5 @@
-// Cerber - gate controller (ESP32). One firmware for every gate; the gate is
-// selected by the PlatformIO environment (see platformio.ini).
+// Cerber - gate controller (ESP32 or ESP8266). One firmware for every gate;
+// the gate is selected by the PlatformIO environment (see platformio.ini).
 // Pulses the relay when "START" arrives on the command topic and reports
 // ONLINE / OFFLINE (retained, OFFLINE via Last Will) on the status topic.
 // Each command is answered on the ack topic with "OK" (relay on) or
@@ -11,14 +11,19 @@
 
 #include <Arduino.h>
 #include <ArduinoOTA.h>
-#include <Preferences.h>
 #include <PubSubClient.h>
+#include <WiFiClientSecure.h>
+#include <time.h>
+
+#if defined(ESP8266)
+#include <ESP8266WiFi.h>
+#else
+#include <Preferences.h>
 #include <Update.h>
 #include <WiFi.h>
-#include <WiFiClientSecure.h>
 #include <esp_ota_ops.h>
 #include <esp_timer.h>
-#include <time.h>
+#endif
 
 #include "ca_cert.h"
 #include "secrets.h" // credentials live in secrets.development.h (not in the repo)
@@ -51,7 +56,11 @@ const char* LOG_TAG = DEVICE_LABEL;
 // ===================== PINS =====================
 // Can be overridden per gate in platformio.ini (-D RELAY_PIN=...).
 #ifndef RELAY_PIN
+#if defined(ESP8266)
+#define RELAY_PIN 14 // D5
+#else
 #define RELAY_PIN 26 // ESP32U - safer than GPIO12
+#endif
 #endif
 // Wi-Fi status LED; a gate without one sets -D NO_STATUS_LED.
 #if !defined(NO_STATUS_LED) && !defined(LED_PIN)
@@ -68,6 +77,11 @@ const unsigned long RELAY_PULSE_MS = 1000;
 // ===================== OBJECTS =====================
 WiFiClientSecure espClient;
 PubSubClient client(espClient);
+
+#if defined(ESP8266)
+// BearSSL takes the trusted roots as a parsed certificate list.
+BearSSL::X509List mqttCaCert(MQTT_CA_CERT);
+#endif
 
 // ===================== STATE =====================
 bool relayPulseActive = false;
@@ -92,13 +106,19 @@ bool otaStarted = false;
 
 // Firmware installed over OTA runs "on trial" until it stays connected to
 // Wi-Fi; otherwise the previous firmware is restored (see OTA TRIAL).
-Preferences otaPrefs;
+// ESP32 only - the ESP8266 has no second app slot to roll back to.
 bool otaTrial = false;
+#if defined(ESP32)
+Preferences otaPrefs;
 unsigned long otaTrialStartedAt = 0;
 unsigned long otaTrialWifiSince = 0;
 const unsigned long OTA_TRIAL_TIMEOUT_MS = 180000;     // 3 minutes to reach Wi-Fi
 const unsigned long OTA_TRIAL_WIFI_STABLE_MS = 30000;  // Wi-Fi must hold for 30 s
 const uint8_t OTA_TRIAL_MAX_BOOTS = 3;                 // crash loop protection
+#endif
+
+// BearSSL on the ESP8266 checks certificate dates, so MQTT waits for NTP.
+const time_t TIME_SYNCED_AFTER = 1700000000;
 
 // ===================== DECLARATIONS =====================
 void publishDeviceInfo();
@@ -142,7 +162,12 @@ void setStatusLed(bool on) {
 // ===================== WIFI =====================
 void setupWiFi() {
   WiFi.mode(WIFI_STA);
-  WiFi.setSleep(false);          // important for ESP32 Wi-Fi stability
+  // No Wi-Fi power saving - important for connection stability.
+#if defined(ESP8266)
+  WiFi.setSleepMode(WIFI_NONE_SLEEP);
+#else
+  WiFi.setSleep(false);
+#endif
   WiFi.setAutoReconnect(true);
   WiFi.persistent(false);
 
@@ -234,6 +259,13 @@ bool reconnectMqttOnce() {
     return false;
   }
 
+#if defined(ESP8266)
+  if (time(nullptr) < TIME_SYNCED_AFTER) {
+    Serial.println("Waiting for NTP time before connecting to MQTT...");
+    return false;
+  }
+#endif
+
   Serial.println("Connecting to MQTT...");
 
   bool connected = client.connect(
@@ -282,9 +314,17 @@ void handleMqtt() {
 }
 
 // ===================== DEVICE INFO =====================
+long long uptimeSeconds() {
+#if defined(ESP8266)
+  return (long long)(micros64() / 1000000);
+#else
+  return (long long)(esp_timer_get_time() / 1000000);
+#endif
+}
+
 void publishDeviceInfo() {
   time_t now = time(nullptr);
-  long long epoch = now > 1700000000 ? (long long)now : 0; // 0 until NTP sync
+  long long epoch = now > TIME_SYNCED_AFTER ? (long long)now : 0; // 0 until NTP sync
 
   char payload[192];
   snprintf(
@@ -293,7 +333,7 @@ void publishDeviceInfo() {
     "{\"firmware\":\"%s\",\"rssi\":%d,\"uptime\":%lld,\"ip\":\"%s\",\"time\":%lld}",
     FIRMWARE_VERSION,
     WiFi.RSSI(),
-    (long long)(esp_timer_get_time() / 1000000),
+    uptimeSeconds(),
     WiFi.localIP().toString().c_str(),
     epoch
   );
@@ -328,6 +368,7 @@ void handleDeviceInfo() {
 }
 
 // ===================== OTA TRIAL =====================
+#if defined(ESP32)
 // The trial is tied to the partition written by OTA, so a later USB upload
 // (which boots another partition) never inherits a stale trial.
 void startOtaTrial() {
@@ -409,6 +450,12 @@ void handleOtaTrial() {
     rollBackFirmware("no Wi-Fi");
   }
 }
+#else
+// The ESP8266 keeps a single app slot, so there is nothing to roll back to.
+void startOtaTrial() {}
+void beginOtaTrial() {}
+void handleOtaTrial() {}
+#endif
 
 // ===================== OTA =====================
 void startOta() {
@@ -473,7 +520,11 @@ void setup() {
   setupWiFi();
   configTime(0, 0, "pool.ntp.org", "time.google.com");
 
+#if defined(ESP8266)
+  espClient.setTrustAnchors(&mqttCaCert);
+#else
   espClient.setCACert(MQTT_CA_CERT);
+#endif
 
   client.setServer(MQTT_HOST, MQTT_PORT);
   client.setCallback(mqttCallback);

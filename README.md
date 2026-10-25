@@ -65,7 +65,7 @@ Projekt składa się z aplikacji mobilnej oraz sterowników ESP32 – po jednym 
 | 📡 **Status**                   | Stan połączenia oraz podstawowe informacje diagnostyczne sterowników.        |
 | ⚙️ **Ustawienia**               | Konfiguracja połączenia z brokerem bez zmian w kodzie.                       |
 | 🔁 **Niezawodność**             | Automatyczne wznawianie połączeń po stronie aplikacji i sterowników.         |
-| 📶 **Aktualizacja przez Wi-Fi** | Firmware sterowników można aktualizować w sieci lokalnej; nieudana aktualizacja jest automatycznie wycofywana. |
+| 📶 **Aktualizacja przez Wi-Fi** | Firmware sterowników można aktualizować w sieci lokalnej; na sterownikach ESP32 nieudana aktualizacja jest automatycznie wycofywana. |
 
 ---
 
