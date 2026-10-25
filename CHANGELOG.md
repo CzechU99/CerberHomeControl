@@ -1,3 +1,17 @@
+## v1.3.0 (2026-10-25)
+
+### Feat
+
+- **firmware**: let each gate choose between two Wi-Fi networks
+- **firmware**: support ESP8266 boards and use one for the Toyota gate
+- **firmware**: allow gates without a status LED and disable it for the main gate
+- **app**: show the command result by blinking the gate button
+- **app**: add general settings for hold time, ack timeout, vibration and visible gates
+
+### Fix
+
+- **app**: vibrate with the phone motor instead of system touch feedback
+
 ## v1.2.0 (2026-10-24)
 
 ### Feat
