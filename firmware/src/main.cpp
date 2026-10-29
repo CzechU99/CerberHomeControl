@@ -179,6 +179,15 @@ void setupWiFi() {
   WiFi.setAutoReconnect(true);
   WiFi.persistent(false);
 
+#if defined(ESP8266)
+  // The ESP8266 SDK auto-connects at boot with Wi-Fi settings saved in flash
+  // (e.g. by older firmware); a stale password there makes the router reject
+  // it and blocks our own WiFi.begin(). Drop that attempt first.
+  WiFi.setAutoConnect(false);
+  WiFi.disconnect();
+  delay(100);
+#endif
+
   Serial.print("Connecting to Wi-Fi: ");
   Serial.println(WIFI_SSID);
 
