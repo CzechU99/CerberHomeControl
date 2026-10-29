@@ -1,3 +1,9 @@
+## v1.3.1 (2026-10-29)
+
+### Fix
+
+- **firmware**: ignore Wi-Fi settings saved on ESP8266 boards by older firmware
+
 ## v1.3.0 (2026-10-25)
 
 ### Feat
