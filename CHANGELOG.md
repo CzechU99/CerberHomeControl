@@ -1,3 +1,9 @@
+## v1.4.0 (2026-10-30)
+
+### Feat
+
+- **firmware**: set up the ESP-12F relay board for the main gate
+
 ## v1.3.1 (2026-10-29)
 
 ### Fix
