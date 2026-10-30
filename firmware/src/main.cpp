@@ -75,9 +75,15 @@ const char* LOG_TAG = DEVICE_LABEL;
 #define LED_PIN 13
 #endif
 
-// Most relay modules are active LOW
+// Most relay modules are active LOW; boards that switch the relay on HIGH
+// set -D RELAY_ACTIVE_HIGH.
+#if defined(RELAY_ACTIVE_HIGH)
+#define RELAY_ACTIVE HIGH
+#define RELAY_INACTIVE LOW
+#else
 #define RELAY_ACTIVE LOW
 #define RELAY_INACTIVE HIGH
+#endif
 
 // Relay / contactor pulse length
 const unsigned long RELAY_PULSE_MS = 1000;
@@ -186,6 +192,8 @@ void setupWiFi() {
   WiFi.setAutoConnect(false);
   WiFi.disconnect();
   delay(100);
+  // 802.11g only: ESP8266 often fails to join ASUS routers in 802.11n mode.
+  WiFi.setPhyMode(WIFI_PHY_MODE_11G);
 #endif
 
   Serial.print("Connecting to Wi-Fi: ");
@@ -525,8 +533,10 @@ void setup() {
   Serial.begin(115200);
   delay(500);
 
-  pinMode(RELAY_PIN, OUTPUT);
+  // Set the idle level before enabling the output, so the relay never
+  // blips on during boot.
   digitalWrite(RELAY_PIN, RELAY_INACTIVE);
+  pinMode(RELAY_PIN, OUTPUT);
 
 #ifdef LED_PIN
   pinMode(LED_PIN, OUTPUT);
