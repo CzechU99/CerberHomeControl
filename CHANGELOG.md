@@ -1,3 +1,10 @@
+## v1.5.0 (2026-11-07)
+
+### Feat
+
+- **hardware**: add 3D-printed enclosures for the Hyundai and main gate controllers
+- **firmware**: set up the Hyundai gate board without a status LED
+
 ## v1.4.0 (2026-10-30)
 
 ### Feat
