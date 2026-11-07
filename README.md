@@ -75,7 +75,9 @@ Projekt składa się z aplikacji mobilnej oraz sterowników ESP32 – po jednym 
 CerberHomeControl/
 ├── .github/workflows/   GitHub Actions
 ├── app/                 aplikacja mobilna Flutter
+├── docs/                instrukcje napędów i schematy okablowania (docs/wiring)
 ├── firmware/            firmware ESP32 (PlatformIO)
+├── hardware/            obudowy sterowników do druku 3D
 └── scripts/             narzędzia wydań
 ```
 
